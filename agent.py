@@ -4,6 +4,8 @@ import numpy as np
 import uuid
 from collections import Counter
 
+#TODO add proper documentation
+
 
 class Position(Agent):
     """Initiates positions, conceived as duals to vacancies and actors."""
@@ -17,12 +19,12 @@ class Actor(Entity):
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "actor"
-        self.move_probability = self.model.move_probability
+        self.retire_probability = self.model.move_probabilities["actor retirement prob"]
 
     def step(self):
         """"Actors only move to retire from the top level, and only if it won't leave too many vacancies."""
-        if (self.position[0] == "1"):
-            if bool(np.random.binomial(1, 0.1)):
+        if self.position[0] == "1":
+            if bool(np.random.binomial(1, self.retire_probability)):
                 self.model.retiree_spots.add(self.position)  # mark your position as that of retiree
                 self._next_state = "retire"
 
@@ -38,17 +40,18 @@ class Vacancy(Entity):
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "vacancy"
-        self.move_probability = self.model.move_probability
+        self.move_probability = self.model.move_probabilities["vacancy move prob"]
+        self.retire_probability = self.model.move_probabilities["vacancy retire prob"]
 
 
     def step(self):
         """Vacancies only move down. When they hit bottom level, they retire."""
         if int(self.position[0]) == self.model.num_levels:  # if at bottom level,
-            if bool(np.random.binomial(1, 0.2)):
+            if bool(np.random.binomial(1, self.retire_probability)):
                 self.model.retiree_spots.add(self.position)
                 self._next_state = "retire"
         else:  # move down
-            if bool(np.random.binomial(1, 0.5)):
+            if bool(np.random.binomial(1, self.move_probability)):
                 self._next_state = self.next_position(int(self.position[0]) + 1)
 
     def advance(self):

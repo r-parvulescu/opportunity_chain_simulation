@@ -2,6 +2,8 @@ from mesa import Agent
 import random
 
 
+#TODO add proper documentation
+
 class Entity(Agent):
     """Superclass for vacancy and actor agents."""
     def __init__(self, unique_id, model):

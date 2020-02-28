@@ -1,25 +1,27 @@
 from mesa import Model
 from agent import Actor, Position, Vacancy
 from helpers import fraction_of_list, agent_counts, mean_lengths, length_std, percent_vacancy_per_level
-from helpers import mean_spell_length_per_agent_type, std_spell_length_per_agent_type
+from helpers import mean_spell_lengths, std_spell_lengths
 from random_simultaneous import SimultaneousActivation
 from mesa.datacollection import DataCollector
 import uuid
+
+#TODO add proper documentation
 
 
 class MobilityModel(Model):
     """A hierarchical mobility model.
     Initialisation Parameters
     :param: positions_per_level: list of ints
-    :param move_probability: float [0,1]
+    :param move_probabilities: float [0,1]
     :param initial_vacancy_fraction: float [0,1]
     :param firing_schedule: dict of form {"steps":5,10, "level-retire probability": (1,0.4), (2,0.4), (3,0.6)}
     """
 
-    def __init__(self, positions_per_level, move_probability, initial_vacancy_fraction, firing_schedule):
+    def __init__(self, positions_per_level, move_probabilities, initial_vacancy_fraction, firing_schedule):
         self.num_levels = len(positions_per_level)
         self.positions_per_level = positions_per_level
-        self.move_probability = move_probability
+        self.move_probabilities = move_probabilities
         self.vacancy_fraction = initial_vacancy_fraction
         self.firing_schedule = firing_schedule
         self.percent_vacancy_per_level = []
@@ -58,8 +60,8 @@ class MobilityModel(Model):
             model_reporters={"agent_counts": agent_counts,
                              "mean_lengths": mean_lengths,
                              "lengths_std": length_std,
-                             "mean_spells": mean_spell_length_per_agent_type,
-                             "spells_std": std_spell_length_per_agent_type,
+                             "mean_spells": mean_spell_lengths,
+                             "spells_std": std_spell_lengths,
                              "percent_vacant_per_level": percent_vacancy_per_level})
 
     def step(self):
