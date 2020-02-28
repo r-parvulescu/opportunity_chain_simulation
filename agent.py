@@ -17,11 +17,12 @@ class Actor(Entity):
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "actor"
+        self.move_probability = self.model.move_probability
 
     def step(self):
-        """"Actors only move to retire from the top level."""
-        if self.position[0] == "1":
-            if bool(np.random.binomial(1, self.model.move_probability)):
+        """"Actors only move to retire from the top level, and only if it won't leave too many vacancies."""
+        if (self.position[0] == "1"):
+            if bool(np.random.binomial(1, 0.1)):
                 self.model.retiree_spots.add(self.position)  # mark your position as that of retiree
                 self._next_state = "retire"
 
@@ -37,21 +38,18 @@ class Vacancy(Entity):
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "vacancy"
+        self.move_probability = self.model.move_probability
+
 
     def step(self):
-        """Vacancies move within the system; they only leave the system from the bottom level."""
-        # moves based on fair coin toss
-        if bool(np.random.binomial(1, self.model.move_probability)):
-            if int(self.position[0]) == 1:  # you're at the top level, can only go down
+        """Vacancies only move down. When they hit bottom level, they retire."""
+        if int(self.position[0]) == self.model.num_levels:  # if at bottom level,
+            if bool(np.random.binomial(1, 0.2)):
+                self.model.retiree_spots.add(self.position)
+                self._next_state = "retire"
+        else:  # move down
+            if bool(np.random.binomial(1, 0.5)):
                 self._next_state = self.next_position(int(self.position[0]) + 1)
-            else:  # decide whether to go up or down based on fair coin toss
-                next_level = int(self.position[0]) + 1 if bool(np.random.binomial(1, 0.5)) \
-                    else int(self.position[0]) - 1
-                if next_level > self.model.levels:  # if leaving from bottom level, retire
-                    self.model.retiree_spots.add(self.position)
-                    self._next_state = "retire"
-                else:
-                    self._next_state = self.next_position(next_level)
 
     def advance(self):
         """Move to spot."""

@@ -3,12 +3,13 @@ import random
 
 
 class Entity(Agent):
-    """Superclass for vacancy and actor agents, for holding methods."""
+    """Superclass for vacancy and actor agents."""
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = ''  # type of entity: vacancy, or actor
         self.position = ''  # ID of current position
         self.log = []  # log of moves
+        self.move_probability = None  # the probability with which an agent moves, float [0,1]
         self._next_state = None
 
     def next_position(self, next_level):
