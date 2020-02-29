@@ -1,11 +1,16 @@
+"""
+generalised behaviour for actors and vacancies
+"""
+
 from mesa import Agent
-import random
+from random import shuffle
 
-
-#TODO add proper documentation
 
 class Entity(Agent):
-    """Superclass for vacancy and actor agents."""
+    """
+    superclass for vacancy and actor agents
+    not intended to be used on its own, but to inherit its methods to multiple other agents
+    """
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = ''  # type of entity: vacancy, or actor
@@ -14,26 +19,23 @@ class Entity(Agent):
         self.move_probability = None  # the probability with which an agent moves, float [0,1]
         self._next_state = None
 
-    def next_position(self, next_level):
+    def get_next_position(self, next_level):
         """
-        Given a level, pick a random position to which you want to advance.
+        randomly pick a position in some level and return its ID and the ID of its current occupant.
         :param next_level: int
         """
         next_positions = list(self.model.positions[next_level].values())
-        random.shuffle(next_positions)
+        shuffle(next_positions)
         for p in next_positions:
-            if p.dual[1] != self.type:  # only pick if position is occupied by a dissimilar agent
-                # mark position as desired
-                self.model.desired_positions.append(p.unique_id)
-                # and return its ID and who's in it
-                return p.unique_id, p.dual[0]
+            if p.dual[1] != self.type:  # vacancies only pick positions occupied by actors, and vice versa
+                self.model.desired_positions.append(p.unique_id)  # mark position as desired
+                return p.unique_id, p.dual[0]  # return positions ID and ID of current dual/occupant
 
     def retire(self, other):
         """
-        Swap with an agent from outside the system, and leave the system.
+        swap with an agent and mark yourself as retired
         :param other: an Entity-class object
         """
-        # swap with a dissimilar entity from the outside
         self.swap(other)
         self.model.schedule.add(other)  # put new entity into scheduler
         self.model.schedule.remove(self)  # take yourself out of it
@@ -41,10 +43,9 @@ class Entity(Agent):
 
     def swap(self, other):
         """
-        Swap positions with another in-system entity
+        swap positions with an entity
         :param other: an Entity-class object
         """
-
         new_position = other.position  # mark where you're going
         other.position = self.position  # put swapee in your position
         other.log.append(other.position)  # update swapee's log
@@ -60,5 +61,5 @@ class Entity(Agent):
             self.model.positions[your_new_level][self.position].dual = [self.unique_id, self.type]
 
     def unmoving_update_log(self):
-        """Update own log if not moving."""
+        """update own log if not moving."""
         self.log.append(self.log[-1])
