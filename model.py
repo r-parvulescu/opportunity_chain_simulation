@@ -19,6 +19,10 @@ from random import shuffle
 
 # start of datacollector functions
 
+def get_total_mobility(model):
+    """return the total number of position movements of actors and vacancies in the last turn"""
+    return {"Actors": model.per_step_movement["actor"], "Vacancies": model.per_step_movement["vacancy"]}
+
 
 def get_percent_vacancy_per_level(model):
     """return the percentage of vacancies for each level of the mobility system"""
@@ -33,7 +37,7 @@ def get_percent_vacancy_per_level(model):
     vacancy_percentages = {"Level " + str(i + 1): 0 for i in range(model.num_levels)}
     for i in range(model.num_levels):
         key = "Level " + str(i + 1)
-        vacancy_percentages[key] = vacancy_counts[i] / (vacancy_counts[i] + actor_counts[i])
+        vacancy_percentages[key] = (vacancy_counts[i] / (vacancy_counts[i] + actor_counts[i]))*100
     return vacancy_percentages
 
 
@@ -79,7 +83,7 @@ def get_mean_spell_length(some_list):
     """
     spell_lengths = [sum(1 for i in g) for k, g in groupby(some_list)]
     spell_lengths = [i for i in spell_lengths if i != 1]
-    if not spell_lengths:
+    if spell_lengths:
         return mean(spell_lengths)
 
 
@@ -137,20 +141,24 @@ class MobilityModel(Model):
     """
 
     # TODO give agents the choice to move laterally
-    # TODO also need to introduce retirement probabilities for second leve, in case of firing
+    # TODO also need to introduce retirement probabilities for second level, in case of firing
 
     def __init__(self, positions_per_level, move_probabilities, initial_vacancy_fraction, firing_schedule):
         """
         :param positions_per_level: list of positions per level ;list of ints
                                     e.g. [10,20,30] == 10 positions in level 1, 20 in level 2, etc.
         :param move_probabilities: dict of move probabilities for agents, specific format below
-                                    e.g. {"actor retirement prob": 0.1, "vacancy move prob": 0.5,
-                                         "vacancy retire prob": 0.2}
+                                    NB: vector of actor retirement probs is per level
+                                    e.g. [retire prob level 1, retire prob level 2, retire prob level 3]
+                                    while vector of move  probs for vacancies is for vacancies, in order of
+                                    [don't move, retire, move in same level, move down level]
+                                    e.g. {"actor retirement probs": [0.1, 0.1, 0.1]
+                                          "vacancy move probs": [0.3, 0..1, 0.3, 0.3]}
         :param initial_vacancy_fraction: float [0,1] telling us what percentage of positions in each level
                                          should be vacant at model initialisation
         :param firing_schedule: dict indicating what retirement probabilities should be at given steps (form below)
                                 this facilitates one-off changes where portions of levels are emptied of actors
-                                e.g. {"steps":5,10, "level-retire probability": (1,0.4), (2,0.4), (3,0.6)}
+                                e.g. {"steps": {5, 10}, "level-retire probability": [(1, 0.4), (2, 0.4), (3, 0.6)]}
         """
         super().__init__()
         # set parameters
@@ -160,17 +168,19 @@ class MobilityModel(Model):
         self.vacancy_fraction = initial_vacancy_fraction
         self.firing_schedule = firing_schedule
 
+        self.per_step_movement = {"actor": 0, "vacancy": 0}
+
         self.schedule = SimultaneousActivation(self)
         self.running = True
         self.datacollector = DataCollector(
             model_reporters={"agent_counts": get_agent_counts,
                              "percent_vacant_per_level": get_percent_vacancy_per_level,
                              "mean_lengths": get_sequence_and_vacancy_mean_lengths,
-                             "lengths_std": get_sequence_and_vacancy_length_stdev,
-                             "mean_spells": get_mean_spell_lengths,
-                             "spells_std": get_stdev_spell_lengths})
+                             "mean_lengths_std": get_sequence_and_vacancy_length_stdev,
+                             "mean_spell_lengths": get_mean_spell_lengths,
+                             "mean_spell_length_stdev": get_stdev_spell_lengths,
+                             "total mobility": get_total_mobility})
 
-        # TODO if I get rid of that "-" in the position IDs will simpify str to int moves throughout
         # make positions and populate them with agents
         self.positions = {i: {} for i in range(1, self.num_levels + 1)}
         for i in range(self.num_levels):
@@ -195,9 +205,11 @@ class MobilityModel(Model):
     def step(self):
         # collect data before anything moves
         self.datacollector.collect(self)
+        # reset the counts for per step agent movement
+        self.per_step_movement = {"actor": 0, "vacancy": 0}
         # if there are firing orders, carry them out
-        if self.firing_schedule is not None:
-            self.fire()
+        if self.schedule.steps in self.firing_schedule["steps"]:
+            self.fire(self.schedule.steps)
         # tell agents to step
         self.schedule.step()
         # update position logs
@@ -208,15 +220,12 @@ class MobilityModel(Model):
         self.retiree_spots = set()
         self.desired_positions = []
 
-    # TODO if I make "steps" a set I can dispense with the first for-loop
+
+
     # part of step
-    def fire(self):
+    def fire(self, step):
         """at specified step change the retirement probability of actors in specified level"""
-        for step in self.firing_schedule["steps"]:
-            if step - 1 == self.schedule.steps:
-                for orders in self.firing_schedule["level-retire probability"]:
-                    level = orders[0]
-                    probability_of_retiring = orders[1]
-                    for a in self.schedule.agents:
-                        if (a.type == "actor") and (int(a.position[0]) == level):
-                            a.move_probability = probability_of_retiring
+        retirement_probs = self.firing_schedule["actor retirement probs"]
+        for a in self.schedule.agents:
+            if (a.type == "actor"):
+                a.move_probability = retirement_probs

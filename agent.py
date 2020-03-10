@@ -7,10 +7,12 @@ from entity import Entity
 from numpy import random
 from uuid import uuid4
 from collections import Counter
+import numpy as np
 
 
 class Position(Agent):
     """a position that can be occupied by vacancies and actors"""
+
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.dual = ['', '']  # the ID and type of current occupant
@@ -19,17 +21,18 @@ class Position(Agent):
 
 class Actor(Entity):
     """an agent that can retire or be moved around by vacancies"""
+
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "actor"
-        self.retire_probability = self.model.move_probabilities["actor retirement prob"]
+        self.move_probability = self.model.move_probabilities["actor retirement probs"]
 
     def step(self):
-        """if at top level, may retire"""
-        if self.position[0] == "1":
-            if bool(random.binomial(1, self.retire_probability)):
-                self.model.retiree_spots.add(self.position)  # mark your position as that of a retiree
-                self._next_state = "retire"
+        """may retire"""
+        self.retire_probability = self.move_probability[int(self.position[0]) - 1]
+        if bool(random.binomial(1, self.retire_probability)):
+            self.model.retiree_spots.add(self.position)  # mark your position as that of a retiree
+            self._next_state = "retire"
 
     def advance(self):
         """if retiring, call an outside vacancy to take your place, else update your log"""
@@ -42,20 +45,23 @@ class Actor(Entity):
 
 class Vacancy(Entity):
     """an entity that can change positions or retire"""
+
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.type = "vacancy"
-        self.move_probability = self.model.move_probabilities["vacancy move prob"]
-        self.retire_probability = self.model.move_probabilities["vacancy retire prob"]
+        self.move_probability = self.model.move_probabilities["vacancy move probs"]
 
     def step(self):
-        """vacancies can only move down"""
-        if int(self.position[0]) == self.model.num_levels:  # if at bottom level, retire
-            if bool(random.binomial(1, self.retire_probability)):
-                self.model.retiree_spots.add(self.position)
-                self._next_state = "retire"
-        else:  # move down, call actor up
-            if bool(random.binomial(1, self.move_probability)):
+        """vacancies stay put, move in level, move down, or retire"""
+        next_move = self.pick_move()
+        if next_move == 1:
+            self.model.retiree_spots.add(self.position)
+            self._next_state = "retire"
+        elif next_move == 2:  # move in same level
+            self._next_state = self.get_next_position(self.position[0])
+        elif next_move == 3:  # move down one level
+            # if you're at bottom level already, stay puy
+            if int(self.position[0]) + 1 <= self.model.num_levels:
                 self._next_state = self.get_next_position(int(self.position[0]) + 1)
 
     def advance(self):
@@ -80,3 +86,5 @@ class Vacancy(Entity):
                 if self._next_state[1] == o.unique_id:
                     self.swap(o)
                     return
+
+

@@ -1,15 +1,13 @@
 """
 tools for plotting per-step means and standard
 deviations of metrics from batch runs of MobilityModel
-the data structure is of multiply nested dicts, insipred from MESA's batchrunner module
-the dict structure is
-{runs
-    {models
-        {steps
-            {metrics
-                {submetrics (one each for actor and vacancy, or per level of the hierarchy)
-                    {means and stdevs for submetric
-}}}}}}
+the data structure (riffing off MESA's batchrunner module) is of a list containing of nested dicts, with structure
+[models in run order
+    {steps per model
+        {metrics per step
+            {submetrics (one each for actor and vacancy, or per level of the hierarchy)
+                {means and stdevs for submetric
+}}}}]
 """
 
 import matplotlib.pyplot as plt
@@ -106,9 +104,13 @@ def get_means_std(batchrun):
     return per_step_stats
 
 
-def plot_lines(batchrun):
-    """plot mean lines with shaded regions 2*stdev, with floor of zero"""
-    colours = ['r-', 'b-', 'g-', 'k-', 'c-', 'm-', 'y-']
+def make_time_series_figures(batchrun):
+    """
+    makes time series figures and saves them to disk
+    if input is more than one batchrun (must be with same parameter types and number of steps) then
+    overlays the output of the two batchruns in the same figure, so you can see difference betweem
+    batchrun metrics
+    """
     per_step_stats = get_means_std(batchrun)
     for k in per_step_stats.keys():  # look into the metrics
         colour_counter = 0
@@ -120,19 +122,70 @@ def plot_lines(batchrun):
                     mean_line = m[1]
                 else:
                     stdev_line = m[1]
-            # now plot the line
-            x = np.linspace(0, len(mean_line)-1, len(mean_line))
-            plt.plot(x, mean_line, colours[colour_counter], label=l)
-            # make sure lower stdev doesn't go below zero
-            stdev_lowbound = mean_line - stdev_line * 2
-            stdev_lowbound[stdev_lowbound < 0] = 0
-            plt.fill_between(x, stdev_lowbound, mean_line + stdev_line * 2, alpha=0.2)
+            # plot the line
+            plot_mean_line(l, mean_line, stdev_line, colour_counter, linestyle="-")
             colour_counter += 1
-
+        # name the plot, save the figure to disk
         title_name = k.replace('_', ' ')
-        plt.title(title_name.title())
-        plt.legend(loc='upper left', fontsize='medium')
-        figure_filename = "figures/" + title_name + "_" + str(batchrun.iterations) + \
-                          "runs_" + str(batchrun.max_steps) + "steps.png"
-        plt.savefig(figure_filename)
-        plt.close()
+        save_figure(title_name, batchrun)
+
+
+def plot_mean_line(line_name, mean_line, stdev_line, colour_counter, linestyle):
+    """given line name, mean and associated stdev values, and a colour counter, plots a line"""
+    colours = ['r-', 'b-', 'k-', 'g-', 'c-', 'm-', 'y-']
+    colour_counter = colour_counter
+    x = np.linspace(0, len(mean_line) - 1, len(mean_line))
+    plt.plot(x, mean_line, colours[colour_counter], linestyle=linestyle, label=line_name)
+    # make sure lower stdev doesn't go below zero
+    stdev_lowbound = mean_line - stdev_line * 2
+    stdev_lowbound[stdev_lowbound < 0] = 0
+    plt.fill_between(x, stdev_lowbound, mean_line + stdev_line * 2, alpha=0.2)
+
+
+def save_figure(metric_name, batchrun, close=True):
+    """given a title for the figure and a batchrun, completes figure, saves it to .png, and closes open plots"""
+    title_name = metric_name.replace('_', ' ')
+    plt.title(title_name.title())
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
+               fancybox=True, shadow=True, ncol=5,  fontsize='medium')
+    figure_filename = "figures/" + metric_name + "_" + str(batchrun.iterations) + \
+                      "runs_" + str(batchrun.max_steps) + "steps.png"
+    plt.savefig(figure_filename)
+    plt.close()
+
+
+def overaly_time_series_figures(batchruns):
+    """
+    makes time series figures and saves them to disk
+    if input is more than one batchrun (must be with same parameter types and number of steps) then
+    overlays the output of the two batchruns in the same figure, so you can see difference betweem
+    batchrun metrics
+    """
+
+    br1_per_step_stats = get_means_std(batchruns[0])
+    br2_per_step_stats = get_means_std(batchruns[1])
+    # look into the metrics
+    # NB: all batchruns have identical nesting and key:value structure, only bottom level data differ
+    for k in br1_per_step_stats.keys():
+        colour_counter = 0
+        for l in br1_per_step_stats[k].keys():  # look into the submetrics
+            br1_mean_line = None
+            br1_stdev_line = None
+            br2_mean_line = None
+            br2_stdev_line = None
+            for m in br1_per_step_stats[k][l].keys():  # look into means and stdevs
+                if m == "Mean Across Runs":
+                    br1_mean_line = br1_per_step_stats[k][l][m]
+                    br2_mean_line = br2_per_step_stats[k][l][m]
+                else:
+                    br1_stdev_line = br1_per_step_stats[k][l][m]
+                    br2_stdev_line = br2_per_step_stats[k][l][m]
+            # plot the line
+            plot_mean_line(l, br1_mean_line, br1_stdev_line, colour_counter, "-")
+            plot_mean_line("with firings", br2_mean_line, br2_stdev_line, colour_counter, "--")
+            colour_counter += 1
+        # name the plot, save the figure to disk
+        save_figure(k, batchruns[0])
+
+
+

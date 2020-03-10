@@ -4,6 +4,7 @@ generalised behaviour for actors and vacancies
 
 from mesa import Agent
 from random import shuffle
+import numpy as np
 
 
 class Entity(Agent):
@@ -16,15 +17,32 @@ class Entity(Agent):
         self.type = ''  # type of entity: vacancy, or actor
         self.position = ''  # ID of current position
         self.log = []  # log of moves
-        self.move_probability = None  # the probability with which an agent moves, float [0,1]
+        self.move_probability = None  # for in-system moves; float [0,1]
+        self.retire_probability = None  # for leaving the system; float [0,1]
         self._next_state = None
+
+    def pick_move(self):
+        """
+        given a vector of probabilities that sums to one, pick which level you'll go to
+        e.g. vector of probabilities = [0.3, 0.1, 0.3, 0.3]
+        :return: the draw, an int
+        """
+        cum_sum = np.cumsum(self.move_probability)
+        cum_sum = np.insert(cum_sum, 0, 0)
+        # throw random dart
+        rd = np.random.uniform(0.0, 1.0)
+        # see where dart hit
+        m = np.asarray(cum_sum < rd).nonzero()[0]
+        next_level = m[len(m) - 1]
+        return next_level
+
 
     def get_next_position(self, next_level):
         """
         randomly pick a position in some level and return its ID and the ID of its current occupant.
         :param next_level: int
         """
-        next_positions = list(self.model.positions[next_level].values())
+        next_positions = list(self.model.positions[int(next_level)].values())
         shuffle(next_positions)
         for p in next_positions:
             if p.dual[1] != self.type:  # vacancies only pick positions occupied by actors, and vice versa
@@ -40,6 +58,7 @@ class Entity(Agent):
         self.model.schedule.add(other)  # put new entity into scheduler
         self.model.schedule.remove(self)  # take yourself out of it
         self.model.retirees[self.type][self.model.schedule.steps] = self  # mark yourself as retiree
+        self.model.per_step_movement[self.type] += 1
 
     def swap(self, other):
         """
@@ -59,6 +78,8 @@ class Entity(Agent):
         if self.position != '':
             your_new_level = int(self.position[0])
             self.model.positions[your_new_level][self.position].dual = [self.unique_id, self.type]
+        # increment movement counters
+        self.model.per_step_movement[self.type] += 1
 
     def unmoving_update_log(self):
         """update own log if not moving."""
